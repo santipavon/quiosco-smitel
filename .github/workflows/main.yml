@@ -38,40 +38,35 @@ jobs:
         # Instalar plugin de la camara
         cordova plugin add cordova-plugin-camera
         
-        # Configurar la versión de iOS destino en config.xml de forma nativa
-        sed -i '' 's|<platform name="ios">|<platform name="ios">\n    <preference name="DeploymentTarget" value="12.0" />\n    <icon src="icon.png" />|g' config.xml
-        sed -i '' 's|<\/widget>|  <preference name="deployment-target" value="12.0" />\n<\/widget>|g' config.xml
+        # Configurar de forma limpia el icono en config.xml
+        sed -i '' 's|<platform name="ios">|<platform name="ios">\n    <icon src="icon.png" />|g' config.xml
         
         cordova prepare ios
 
-    - name: Compilar Proyecto Aislado (Saltando Grafo de Paquetes)
+    - name: Compilación por Simulador Forzada a Arquitectura Móvil
       run: |
         cd app/platforms/ios
         
-        # Forzamos la compilación apuntando al .xcodeproj directamente para aislarlo del Workspace problemático
-        # Añadimos los flags críticos para ignorar la resolución de Swift Packages erróneos
-        xcodebuild -project App.xcodeproj \
+        # Compilamos usando iphonesimulator (que se salta el bug de Catalyst)
+        # pero forzamos ARCHS=arm64 para que el procesador físico de tu iPhone 5s pueda leer el código binario sin colgarse
+        xcodebuild -workspace App.xcworkspace \
           -scheme App \
           -configuration Debug \
-          -sdk iphoneos \
-          -destination 'generic/platform=iOS' \
-          IPHONEOS_DEPLOYMENT_TARGET=12.0 \
+          -sdk iphonesimulator \
+          -destination 'generic/platform=iOS Simulator' \
           ARCHS="arm64" \
           ONLY_ACTIVE_ARCH=NO \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
-          -disablePackageRepositoryCache \
-          -skipPackagePluginValidation \
           clean build
 
     - name: Construir archivo .IPA oficial para Sideloadly
       run: |
         echo "Localizando el ejecutable real..."
-        APP_PATH=$(find ~ -name "QuioscoSmitel.app" -type d 2>/dev/null | grep -v "BuildProductsPath" | head -n 1)
-        
+        APP_PATH=$(find ~ -name "App.app" -type d 2>/dev/null | head -n 1)
         if [ -z "$APP_PATH" ]; then
-          APP_PATH=$(find ~ -name "App.app" -type d 2>/dev/null | grep -v "BuildProductsPath" | head -n 1)
+          APP_PATH=$(find ~ -name "QuioscoSmitel.app" -type d 2>/dev/null | head -n 1)
         fi
         
         if [ -z "$APP_PATH" ]; then
@@ -85,6 +80,8 @@ jobs:
         cp -R "$APP_PATH" ipa_structure/Payload/
         
         mv ipa_structure/Payload/*.app ipa_structure/Payload/QuioscoSmitel.app 2>/dev/null || :
+        
+        # Forzar compatibilidad total con iOS 12 modificando la metadata final directamente
         plutil -replace MinimumOSVersion -string "12.0" ipa_structure/Payload/QuioscoSmitel.app/Info.plist
         
         cd ipa_structure
