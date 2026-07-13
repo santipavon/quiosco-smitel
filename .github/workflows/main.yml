@@ -40,13 +40,13 @@ jobs:
         cd app
         cordova prepare ios
 
-    - name: Compilar App (Modo Simulador/Pruebas)
+    - name: Compilar App (Forzar ruta de salida)
       run: |
         cd app/platforms/ios
-        xcodebuild -workspace QuioscoSmitel.xcworkspace -scheme QuioscoSmitel -configuration Debug -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO
+        xcodebuild -workspace QuioscoSmitel.xcworkspace -scheme QuioscoSmitel -configuration Debug -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=build/output
 
     - name: Guardar el archivo ejecutable resultante
       uses: actions/upload-artifact@v4
       with:
         name: App-Quiosco-Smitel
-        path: app/platforms/ios/build/emulator/QuioscoSmitel.app
+        path: app/platforms/ios/build/output/QuioscoSmitel.app
