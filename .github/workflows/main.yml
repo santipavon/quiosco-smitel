@@ -21,38 +21,34 @@ jobs:
     - name: Instalar Cordova
       run: npm install -g cordova@11.1.0
 
-    - name: Crear Proyecto Cordova Estable
+    - name: Crear Proyecto Cordova Quiosco Directo
       run: |
         cordova create app com.smitel.quiosco QuioscoSmitel
         cd app
         cordova platform add ios@6.3.0
         
-        # Mover archivos corporativos
-        rm www/index.html
-        cp ../index.html www/
-        cp ../logo.png www/ 2>/dev/null || :
+        # Copiar icono corporativo
         cp ../icon.png . 2>/dev/null || :
         
-        # Instalar plugins críticos para la cámara y los permisos
+        # Instalar el plugin de la cámara para que iOS registre los permisos de hardware
         cordova plugin add cordova-plugin-camera
         
-        # Modificar config.xml para saltarse las restricciones de red y de cámara de Apple
-        # 1. Añadimos el Target y el Icono
-        sed -i '' 's|<platform name="ios">|<platform name="ios">\n    <preference name="DeploymentTarget" value="12.0" />\n    <icon src="icon.png" />|g' config.xml
+        # Configurar el config.xml para que apunte DIRECTO a tu Odoo en vez de usar el index.html local
+        # REEMPLAZA 'http://TU_IP_DE_ODOO:8069' POR LA IP REAL DE TU SERVIDOR ODOO
+        sed -i '' 's|<content src="index.html" />|<content src="http://192.168.0.245:8069" />|g' config.xml
         
-        # 2. TRUCO DE CÁMARA Y RED: Permitir acceso absoluto al origen externo y forzar esquema HTTPS local
-        sed -i '' 's|</platform>|    <preference name="Scheme" value="app" />\n    <preference name="Hostname" value="localhost" />\n    <allow-navigation href="*" />\n    <allow-intent href="*" />\n    <access origin="*" />\n</platform>|g' config.xml
+        # Inyectar permisos de Cámara en el Info.plist de iOS para que no se cierre al pedir acceso
+        sed -i '' 's|<platform name="ios">|<platform name="ios">\n    <preference name="DeploymentTarget" value="12.0" />\n    <icon src="icon.png" />\n    <config-file platform="ios" target="*-Info.plist" parent="NSCameraUsageDescription">\n        <string>Necesitamos la camara para escanear los codigos de fichaje del quiosco.</string>\n    </config-file>|g' config.xml
         
-        # 3. Desactivar el bloqueo ATS de iOS para permitir conectar a IPs locales http://
+        # Abrir el cortafuegos de Apple (ATS) para permitir llamadas HTTP a tu red local
+        sed -i '' 's|</platform>|    <allow-navigation href="*" />\n    <allow-intent href="*" />\n    <access origin="*" />\n</platform>|g' config.xml
         sed -i '' 's|</widget>|  <edit-config file="*-Info.plist" mode="merge" target="NSAppTransportSecurity">\n    <dict>\n      <key>NSAllowsArbitraryLoads</key>\n      <true/>\n    </dict>\n  </edit-config>\n</widget>|g' config.xml
         
         cordova prepare ios
 
-    - name: Compilación NATIVA para Hardware Real (arm64 Físico)
+    - name: Compilación Hardware Real
       run: |
         cd app/platforms/ios
-        
-        # Compilamos para iphoneos (Dispositivo Físico Real) usando la estructura limpia clásica
         xcodebuild -workspace QuioscoSmitel.xcworkspace \
           -scheme QuioscoSmitel \
           -configuration Debug \
@@ -68,19 +64,11 @@ jobs:
 
     - name: Construir archivo .IPA oficial para Sideloadly
       run: |
-        echo "Localizando el ejecutable móvil real..."
+        echo "Localizando ejecutable..."
         APP_PATH=$(find ~ -name "QuioscoSmitel.app" -type d 2>/dev/null | grep -v "BuildProductsPath" | head -n 1)
-        
-        if [ -z "$APP_PATH" ]; then
-          echo "Error crítico: No se encontró ningún binario ejecutable."
-          exit 1
-        fi
-        
         mkdir -p ipa_structure/Payload
         cp -R "$APP_PATH" ipa_structure/Payload/
-        
         plutil -replace MinimumOSVersion -string "12.0" ipa_structure/Payload/QuioscoSmitel.app/Info.plist
-        
         cd ipa_structure
         zip -r ../QuioscoSmitel.ipa Payload
         cd ..
