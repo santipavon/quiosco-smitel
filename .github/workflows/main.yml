@@ -27,21 +27,26 @@ jobs:
         cd app
         cordova platform add ios
         
-        # Mover tu HTML y Logo a la carpeta de la app
+        # Mover tu HTML y Logo de pantalla a la carpeta de la app
         rm www/index.html
         cp ../index.html www/
-        cp ../logo.png www/
+        cp ../logo.png www/ 2>/dev/null || :
+        
+        # Copiar el icono de la máquina de fichar a la raíz de la app
+        cp ../icon.png . 2>/dev/null || :
         
         # Instalar plugin de la camara
         cordova plugin add cordova-plugin-camera
         
-        # Forzar compatibilidad con iOS 12
-        echo '<preference name="deployment-target" value="12.0" />' >> config.xml
+        # Inyectar el icono y la compatibilidad con iOS 12 ANTES del cierre </widget> de forma limpia
+        sed -i '' 's|<\/widget>|  <preference name="deployment-target" value="12.0" />\n  <icon src="icon.png" />\n<\/widget>|g' config.xml
+        
+        echo "=== CONTENIDO DE CONFIG.XML PARA VERIFICAR ==="
+        cat config.xml
 
     - name: Compilar App Real con Cordova
       run: |
         cd app
-        # Compilamos indicando explícitamente el target de iOS 12
         cordova build ios --emulator -- --deploymentTarget="12.0"
 
     - name: Construir archivo .IPA oficial para Sideloadly
