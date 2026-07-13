@@ -38,29 +38,25 @@ jobs:
         # Instalar plugin de la camara
         cordova plugin add cordova-plugin-camera
         
-        # Inyectar la configuración básica del icono de forma limpia
-        sed -i '' 's|<platform name="ios">|<platform name="ios">\n    <icon src="icon.png" />|g' config.xml
+        # Inyectar de forma redundante las directivas de iOS 12 en el config.xml global
+        sed -i '' 's|<platform name="ios">|<platform name="ios">\n    <preference name="DeploymentTarget" value="12.0" />\n    <icon src="icon.png" />|g' config.xml
+        sed -i '' 's|<\/widget>|  <preference name="deployment-target" value="12.0" />\n<\/widget>|g' config.xml
         
         cordova prepare ios
 
-    - name: Compilación Forzada con Librerías Estáticas Integradas
+    - name: Compilación Forzada Nativa iOS 12 (Fijando target en Compilador)
       run: |
         cd app/platforms/ios
         
-        # TRUCO MAESTRO: Forzamos a Xcode a incrustar de forma estática las librerías de Cordova y Swift
-        # Esto evita que el cargador dinámico de iOS 12 mate la aplicación al arrancar.
-        find . -name "project.pbxproj" -exec sed -i '' 's/MACH_O_TYPE = mh_dylib/MACH_O_TYPE = mh_execute/g' {} +
-        find . -name "project.pbxproj" -exec sed -i '' 's/EMBEDDED_CONTENT_CONTAINS_SWIFT = YES/EMBEDDED_CONTENT_CONTAINS_SWIFT = NO/g' {} +
-        
+        # Corregido: Pasamos el flag de Xcode escapando las rutas correctamente para evitar el error 'inherited'
         xcodebuild -workspace App.xcworkspace \
           -scheme App \
           -configuration Debug \
           -sdk iphonesimulator \
-          -destination 'generic/platform=iOS Simulator' \
+          -destination "generic/platform=iOS Simulator" \
+          IPHONEOS_DEPLOYMENT_TARGET=12.0 \
           ARCHS="arm64" \
           ONLY_ACTIVE_ARCH=NO \
-          MACH_O_TYPE="mh_execute" \
-          LD_RUNPATH_SEARCH_PATHS="$(inherited) @executable_path/Frameworks" \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
@@ -69,9 +65,9 @@ jobs:
     - name: Construir archivo .IPA oficial para Sideloadly
       run: |
         echo "Localizando el ejecutable real..."
-        APP_PATH=$(find ~ -name "App.app" -type d 2>/dev/null | head -n 1)
+        APP_PATH=$(find ~ -name "QuioscoSmitel.app" -type d 2>/dev/null | grep -v "BuildProductsPath" | head -n 1)
         if [ -z "$APP_PATH" ]; then
-          APP_PATH=$(find ~ -name "QuioscoSmitel.app" -type d 2>/dev/null | head -n 1)
+          APP_PATH=$(find ~ -name "App.app" -type d 2>/dev/null | grep -v "BuildProductsPath" | head -n 1)
         fi
         
         if [ -z "$APP_PATH" ]; then
@@ -79,12 +75,14 @@ jobs:
           exit 1
         fi
         
+        echo "¡App localizada con éxito en! -> $APP_PATH"
+        
         mkdir -p ipa_structure/Payload
         cp -R "$APP_PATH" ipa_structure/Payload/
         
         mv ipa_structure/Payload/*.app ipa_structure/Payload/QuioscoSmitel.app 2>/dev/null || :
         
-        # Forzar la compatibilidad final de metadatos para iOS 12
+        # Modificar metadatos nativos finales asegurando el despliegue en iOS 12
         plutil -replace MinimumOSVersion -string "12.0" ipa_structure/Payload/QuioscoSmitel.app/Info.plist
         
         cd ipa_structure
