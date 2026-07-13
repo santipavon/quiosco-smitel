@@ -38,11 +38,18 @@ jobs:
     - name: Compilar App Real con Cordova
       run: |
         cd app
-        # Compila de verdad para el simulador generando el binario ejecutable
         cordova build ios --emulator
+
+    - name: Localizar y rescatar la App compilada
+      run: |
+        echo "Buscando la aplicación compilada en el sistema..."
+        # Busca cualquier carpeta .app generada y la mueve a la raíz para asegurar su captura
+        find . -name "QuioscoSmitel.app" -type d -exec cp -R {} ./QuioscoSmitel.app \;
+        echo "Contenido de la raíz del proyecto tras rescate:"
+        ls -d *.app || echo "No se encontró el archivo compilado en ninguna ruta estándar."
 
     - name: Guardar el archivo ejecutable resultante
       uses: actions/upload-artifact@v4
       with:
         name: App-Quiosco-Smitel
-        path: app/platforms/ios/build/emulator/*.app
+        path: QuioscoSmitel.app
