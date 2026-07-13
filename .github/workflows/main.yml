@@ -7,7 +7,8 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    # Cambiamos macos-latest (Xcode 26) por macos-14 (Xcode 15), mucho más amigable con iOS 12
+    runs-on: macos-14
 
     steps:
     - name: Descargar el codigo del repositorio
@@ -38,23 +39,17 @@ jobs:
         # Instalar plugin de la camara
         cordova plugin add cordova-plugin-camera
         
-        # Configurar de forma limpia el icono y la versión de iOS destino en el bloque nativo correcto
+        # Configurar la versión de iOS destino en config.xml de forma nativa
         sed -i '' 's|<platform name="ios">|<platform name="ios">\n    <preference name="DeploymentTarget" value="12.0" />\n    <icon src="icon.png" />|g' config.xml
         sed -i '' 's|<\/widget>|  <preference name="deployment-target" value="12.0" />\n<\/widget>|g' config.xml
         
-        # Preparar los archivos nativos de Xcode
         cordova prepare ios
 
-    - name: Parchear dependencias y Compilar para el procesador del iPhone 5s
+    - name: Compilar para Dispositivo Real en Entorno Estable
       run: |
         cd app/platforms/ios
         
-        # EL TRUCO: Borramos las dependencias de MacCatalyst directamente en el código de configuración de Xcode
-        # para que no den error de compilación al usar el SDK de dispositivo real
-        find . -name "project.pbxproj" -exec sed -i '' '/SUPPORTS_MACCATALYST/d' {} +
-        find . -name "project.pbxproj" -exec sed -i '' 's/com.apple.Platform.MacCatalyst/com.apple.Platform.IPhoneOS/g' {} +
-        
-        # Compilamos para HARDWARE REAL (iphoneos) forzando arquitecturas de 64 bits antiguas (arm64 nativo de Apple A7)
+        # Al estar en Xcode 15, este comando generará el binario arm64 real para tu iPhone 5s sin quejarse de Catalyst
         xcodebuild -workspace App.xcworkspace \
           -scheme App \
           -configuration Debug \
@@ -66,7 +61,7 @@ jobs:
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
-          build
+          clean build
 
     - name: Construir archivo .IPA oficial para Sideloadly
       run: |
@@ -87,7 +82,6 @@ jobs:
         mkdir -p ipa_structure/Payload
         cp -R "$APP_PATH" ipa_structure/Payload/
         
-        # Asegurar el nombre correcto y meter la compatibilidad de iOS 12 en los metadatos finales
         mv ipa_structure/Payload/*.app ipa_structure/Payload/QuioscoSmitel.app 2>/dev/null || :
         plutil -replace MinimumOSVersion -string "12.0" ipa_structure/Payload/QuioscoSmitel.app/Info.plist
         
