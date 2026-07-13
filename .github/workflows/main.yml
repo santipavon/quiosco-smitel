@@ -51,15 +51,16 @@ jobs:
 
     - name: Construir archivo .IPA oficial para Sideloadly
       run: |
-        echo "Localizando la App y construyendo la estructura oficial..."
-        APP_PATH=$(find ~ -name "*.app" -type d 2>/dev/null | grep -v "BuildProductsPath" | head -n 1)
+        echo "Localizando la App corporativa y construyendo la estructura oficial..."
+        # Filtramos estrictamente por el nombre del ejecutable de tu Quiosco
+        APP_PATH=$(find ~ -name "QuioscoSmitel.app" -type d 2>/dev/null | grep -v "BuildProductsPath" | head -n 1)
         
         if [ -z "$APP_PATH" ]; then
-          echo "Error crítico: No se encontró el compilado .app"
+          echo "Error crítico: No se encontró el compilado QuioscoSmitel.app"
           exit 1
         fi
         
-        echo "App encontrada en: $APP_PATH"
+        echo "¡App correcta localizada en! -> $APP_PATH"
         mkdir -p ipa_structure/Payload
         cp -R "$APP_PATH" ipa_structure/Payload/
         
