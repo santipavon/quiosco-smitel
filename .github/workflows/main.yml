@@ -38,11 +38,17 @@ jobs:
         # Instalar plugin de la camara
         cordova plugin add cordova-plugin-camera
         
-        # Configurar de forma limpia el icono y la versión de iOS destino en el bloque nativo correcto
+        # Configurar de forma limpia el icono y la versión de iOS destino en config.xml
         sed -i '' 's|<platform name="ios">|<platform name="ios">\n    <preference name="DeploymentTarget" value="12.0" />\n    <icon src="icon.png" />|g' config.xml
         sed -i '' 's|<\/widget>|  <preference name="deployment-target" value="12.0" />\n<\/widget>|g' config.xml
         
-        # Crear archivo build.json para forzar a Xcode a compilar apuntando a iOS 12
+        # Preparar el proyecto para que se creen los archivos internos de Xcode
+        cordova prepare ios
+        
+        # PARCHE RADICAL: Desactivar MacCatalyst directamente en el archivo de proyecto de Xcode
+        find platforms/ios -name "project.pbxproj" -exec sed -i '' 's/SUPPORTS_MACCATALYST = YES/SUPPORTS_MACCATALYST = NO/g' {} +
+
+        # Crear archivo build.json para asegurar el target en iOS 12
         echo '{
           "ios": {
             "debug": {
@@ -54,13 +60,10 @@ jobs:
           }
         }' > build.json
 
-        echo "=== VERIFICACIÓN DE CONFIG.XML ==="
-        cat config.xml
-
     - name: Compilar App Real con Cordova (Modo Dispositivo Físico)
       run: |
         cd app
-        # Añadimos el '--' obligatorio antes de los flags específicos de Xcode
+        # Compilamos forzando los flags de Xcode sin Catalyst interferente
         cordova build ios --device --buildConfig=build.json -- --codeSignIdentity="Don't Code Sign" NO_CODE_SIGNING_ALLOWED=YES
 
     - name: Construir archivo .IPA oficial para Sideloadly
