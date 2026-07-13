@@ -42,14 +42,16 @@ jobs:
 
     - name: Construir archivo .IPA oficial para Sideloadly
       run: |
-        echo "Localizando la App y construyendo la estructura oficial..."
-        # Localizamos dónde ha dejado Xcode la app compilada
-        APP_PATH=$(find . -name "QuioscoSmitel.app" -type d -head -n 1)
+        echo "Buscando la App en todo el sistema..."
+        # Buscamos en todo el directorio del usuario para cazar el DerivedData de Xcode
+        APP_PATH=$(find ~ -name "QuioscoSmitel.app" -type d 2>/dev/null | head -n 1)
         
         if [ -z "$APP_PATH" ]; then
-          echo "Error: No se encontró el compilado .app"
+          echo "Error crítico: Xcode no generó el archivo .app en ninguna ruta."
           exit 1
         fi
+        
+        echo "App encontrada en: $APP_PATH"
         
         # Creamos la estructura requerida por Apple: Payload/
         mkdir -p ipa_structure/Payload
