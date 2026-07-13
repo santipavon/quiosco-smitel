@@ -40,16 +40,30 @@ jobs:
         cd app
         cordova build ios --emulator
 
-    - name: Localizar y rescatar la App compilada
+    - name: Construir archivo .IPA oficial para Sideloadly
       run: |
-        echo "Buscando la aplicación compilada en el sistema..."
-        # Busca cualquier carpeta .app generada y la mueve a la raíz para asegurar su captura
-        find . -name "QuioscoSmitel.app" -type d -exec cp -R {} ./QuioscoSmitel.app \;
-        echo "Contenido de la raíz del proyecto tras rescate:"
-        ls -d *.app || echo "No se encontró el archivo compilado en ninguna ruta estándar."
+        echo "Localizando la App y construyendo la estructura oficial..."
+        # Localizamos dónde ha dejado Xcode la app compilada
+        APP_PATH=$(find . -name "QuioscoSmitel.app" -type d -head -n 1)
+        
+        if [ -z "$APP_PATH" ]; then
+          echo "Error: No se encontró el compilado .app"
+          exit 1
+        fi
+        
+        # Creamos la estructura requerida por Apple: Payload/
+        mkdir -p ipa_structure/Payload
+        cp -R "$APP_PATH" ipa_structure/Payload/
+        
+        # Comprimimos la carpeta en un .ipa real legítimo
+        cd ipa_structure
+        zip -r ../QuioscoSmitel.ipa Payload
+        cd ..
+        
+        echo "¡Archivo .ipa creado con éxito!"
 
-    - name: Guardar el archivo ejecutable resultante
+    - name: Guardar el archivo ejecutable resultante (.ipa)
       uses: actions/upload-artifact@v4
       with:
-        name: App-Quiosco-Smitel
-        path: QuioscoSmitel.app
+        name: App-Quiosco-Smitel-IPA
+        path: QuioscoSmitel.ipa
