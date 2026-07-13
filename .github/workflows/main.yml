@@ -38,27 +38,28 @@ jobs:
         # Instalar plugin de la camara
         cordova plugin add cordova-plugin-camera
         
-        # Inyectar el icono y la compatibilidad con iOS 12 ANTES del cierre </widget> de forma limpia
-        sed -i '' 's|<\/widget>|  <preference name="deployment-target" value="12.0" />\n  <icon src="icon.png" />\n<\/widget>|g' config.xml
+        # Configurar de forma limpia el icono y la versión de iOS destino en el bloque nativo correcto
+        sed -i '' 's|<platform name="ios">|<platform name="ios">\n    <preference name="DeploymentTarget" value="12.0" />\n    <icon src="icon.png" />|g' config.xml
         
-        echo "=== CONTENIDO DE CONFIG.XML PARA VERIFICAR ==="
+        echo "=== VERIFICACIÓN DE CONFIG.XML ==="
         cat config.xml
 
     - name: Compilar App Real con Cordova
       run: |
         cd app
-        cordova build ios --emulator -- --deploymentTarget="12.0"
+        cordova build ios --emulator
 
     - name: Construir archivo .IPA oficial para Sideloadly
       run: |
         echo "Localizando la App y construyendo la estructura oficial..."
-        APP_PATH=$(find ~ -name "QuioscoSmitel.app" -type d 2>/dev/null | head -n 1)
+        APP_PATH=$(find ~ -name "*.app" -type d 2>/dev/null | grep -v "BuildProductsPath" | head -n 1)
         
         if [ -z "$APP_PATH" ]; then
           echo "Error crítico: No se encontró el compilado .app"
           exit 1
         fi
         
+        echo "App encontrada en: $APP_PATH"
         mkdir -p ipa_structure/Payload
         cp -R "$APP_PATH" ipa_structure/Payload/
         
