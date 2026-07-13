@@ -2,84 +2,102 @@ name: Compilar Quiosco iOS
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-15
 
     steps:
-    - name: Descargar el codigo del repositorio
-      uses: actions/checkout@v4.2.2
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
 
-    - name: Instalar Node.js
-      uses: actions/setup-node@v4.2.0
-      with:
-        node-version: 22
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-    - name: Instalar Cordova
-      run: npm install -g cordova
+      - name: Instalar Cordova
+        run: |
+          npm install -g cordova@12
 
-    - name: Crear Proyecto Cordova
-      run: |
-        cordova create app com.smitel.quiosco QuioscoSmitel
-        cd app
-        cordova platform add ios
-        
-        # Mover tu HTML y Logo de pantalla a la carpeta de la app
-        rm www/index.html
-        cp ../index.html www/
-        cp ../logo.png www/ 2>/dev/null || :
-        
-        # Copiar el icono de la máquina de fichar a la raíz de la app
-        cp ../icon.png . 2>/dev/null || :
-        
-        # Instalar plugin de la camara
-        cordova plugin add cordova-plugin-camera
-        
-        # Configurar el icono y la versión de iOS destino en config.xml
-        sed -i '' 's|<platform name="ios">|<platform name="ios">\n    <preference name="DeploymentTarget" value="12.0" />\n    <icon src="icon.png" />|g' config.xml
-        sed -i '' 's|<\/widget>|  <preference name="deployment-target" value="12.0" />\n<\/widget>|g' config.xml
-        
-        # Preparar y volcar los recursos en la carpeta nativa
-        cordova prepare ios
+      - name: Crear proyecto Cordova
+        run: |
 
-    - name: Compilar nativamente con Xcode (Evitando MacCatalyst)
-      run: |
-        cd app/platforms/ios
-        # Ejecutamos build directo en lugar de archive para silenciar la validación de Mac
-        xcodebuild -workspace App.xcworkspace \
-          -scheme App \
-          -configuration Debug \
-          -destination 'generic/platform=iOS' \
-          IPHONEOS_DEPLOYMENT_TARGET=12.0 \
-          CODE_SIGNING_ALLOWED=NO \
-          CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGN_IDENTITY="" \
-          build
+          cordova create app com.smitel.quiosco QuioscoSmitel
 
-    - name: Construir archivo .IPA oficial para Sideloadly
-      run: |
-        echo "Localizando la App corporativa y construyendo la estructura oficial..."
-        # Buscamos el ejecutable .app real recién construido
-        APP_PATH=$(find ~ -name "QuioscoSmitel.app" -type d 2>/dev/null | grep -v "BuildProductsPath" | head -n 1)
-        
-        if [ -z "$APP_PATH" ]; then
-          echo "Error crítico: No se encontró el compilado QuioscoSmitel.app"
-          exit 1
-        fi
-        
-        echo "¡App correcta localizada en! -> $APP_PATH"
-        mkdir -p ipa_structure/Payload
-        cp -R "$APP_PATH" ipa_structure/Payload/
-        
-        cd ipa_structure
-        zip -r ../QuioscoSmitel.ipa Payload
-        cd ..
+          cd app
 
-    - name: Guardar el archivo ejecutable resultante (.ipa)
-      uses: actions/upload-artifact@v4
-      with:
-        name: App-Quiosco-Smitel-IPA
-        path: QuioscoSmitel.ipa
+          cordova platform add ios@7.1.1
+
+          cordova plugin add cordova-plugin-camera@7
+
+          rm www/index.html
+
+          cp ../index.html www/
+
+          if [ -f ../logo.png ]; then
+            cp ../logo.png www/
+          fi
+
+          if [ -f ../icon.png ]; then
+            cp ../icon.png .
+          fi
+
+          sed -i '' '/<platform name="ios">/a\
+              <preference name="deployment-target" value="12.0"/>
+          ' config.xml
+
+          cordova prepare ios
+
+      - name: Desactivar Mac Catalyst
+        run: |
+
+          cd app/platforms/ios
+
+          grep -R "MACCATALYST" . || true
+
+          sed -i '' \
+          's/SUPPORTS_MACCATALYST = YES;/SUPPORTS_MACCATALYST = NO;/g' \
+          App.xcodeproj/project.pbxproj || true
+
+          sed -i '' \
+          's/ENABLE_MACCATALYST = YES;/ENABLE_MACCATALYST = NO;/g' \
+          App.xcodeproj/project.pbxproj || true
+
+      - name: Compilar
+        run: |
+
+          cd app/platforms/ios
+
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -sdk iphoneos \
+            -configuration Release \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            IPHONEOS_DEPLOYMENT_TARGET=12.0 \
+            build
+
+      - name: Buscar .app
+        run: |
+
+          APP=$(find app/platforms/ios -name "*.app" | head -n 1)
+
+          echo "APP=$APP"
+
+          mkdir Payload
+
+          cp -R "$APP" Payload/
+
+          zip -qry QuioscoSmitel.ipa Payload
+
+      - name: Subir IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuioscoSmitel
+          path: QuioscoSmitel.ipa
