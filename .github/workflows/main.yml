@@ -34,35 +34,32 @@ jobs:
         
         # Instalar plugin de la camara
         cordova plugin add cordova-plugin-camera
+        
+        # Forzar compatibilidad con iOS 12
+        echo '<preference name="deployment-target" value="12.0" />' >> config.xml
 
     - name: Compilar App Real con Cordova
       run: |
         cd app
-        cordova build ios --emulator
+        # Compilamos indicando explícitamente el target de iOS 12
+        cordova build ios --emulator -- --deploymentTarget="12.0"
 
     - name: Construir archivo .IPA oficial para Sideloadly
       run: |
-        echo "Buscando la App en todo el sistema..."
-        # Buscamos en todo el directorio del usuario para cazar el DerivedData de Xcode
+        echo "Localizando la App y construyendo la estructura oficial..."
         APP_PATH=$(find ~ -name "QuioscoSmitel.app" -type d 2>/dev/null | head -n 1)
         
         if [ -z "$APP_PATH" ]; then
-          echo "Error crítico: Xcode no generó el archivo .app en ninguna ruta."
+          echo "Error crítico: No se encontró el compilado .app"
           exit 1
         fi
         
-        echo "App encontrada en: $APP_PATH"
-        
-        # Creamos la estructura requerida por Apple: Payload/
         mkdir -p ipa_structure/Payload
         cp -R "$APP_PATH" ipa_structure/Payload/
         
-        # Comprimimos la carpeta en un .ipa real legítimo
         cd ipa_structure
         zip -r ../QuioscoSmitel.ipa Payload
         cd ..
-        
-        echo "¡Archivo .ipa creado con éxito!"
 
     - name: Guardar el archivo ejecutable resultante (.ipa)
       uses: actions/upload-artifact@v4
