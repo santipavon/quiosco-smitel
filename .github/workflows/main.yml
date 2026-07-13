@@ -11,12 +11,12 @@ jobs:
 
     steps:
     - name: Descargar el codigo del repositorio
-      uses: actions/checkout@v4.2.2 # Versión actualizada
+      uses: actions/checkout@v4.2.2
 
     - name: Instalar Node.js
-      uses: actions/setup-node@v4.2.0 # Versión actualizada
+      uses: actions/setup-node@v4.2.0
       with:
-        node-version: 22 # Subimos a Node 22 para evitar warnings
+        node-version: 22
 
     - name: Instalar Cordova
       run: npm install -g cordova
@@ -40,13 +40,25 @@ jobs:
         cd app
         cordova prepare ios
 
-    - name: Compilar App (Forzar destino y ruta)
+    - name: Compilar App (Autodetectar proyecto)
       run: |
         cd app/platforms/ios
-        xcodebuild -workspace QuioscoSmitel.xcworkspace -scheme QuioscoSmitel -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=build/output
+        # Buscamos el espacio de trabajo generado dinámicamente
+        WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
+        SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list | grep "Schemes:" -A 1 | tail -n 1 | xargs)
+        
+        echo "Compilando Workspace: $WORKSPACE con el Scheme: $SCHEME"
+        
+        xcodebuild -workspace "$WORKSPACE" \
+          -scheme "$SCHEME" \
+          -configuration Debug \
+          -sdk iphonesimulator \
+          -destination 'generic/platform=iOS Simulator' \
+          CODE_SIGNING_ALLOWED=NO \
+          CONFIGURATION_BUILD_DIR=build/output
 
     - name: Guardar el archivo ejecutable resultante
       uses: actions/upload-artifact@v4
       with:
         name: App-Quiosco-Smitel
-        path: app/platforms/ios/build/output/QuioscoSmitel.app
+        path: app/platforms/ios/build/output/*.app
