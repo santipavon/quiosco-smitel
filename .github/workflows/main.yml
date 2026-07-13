@@ -16,16 +16,18 @@ jobs:
     - name: Instalar Node.js
       uses: actions/setup-node@v4.2.0
       with:
-        node-version: 22
+        node-version: 18 # Usamos Node 18, ideal para versiones estables de Cordova
 
     - name: Instalar Cordova
-      run: npm install -g cordova
+      run: npm install -g cordova@11.1.0
 
-    - name: Crear Proyecto Cordova
+    - name: Crear Proyecto Cordova Puro (Fijado para iOS 12)
       run: |
         cordova create app com.smitel.quiosco QuioscoSmitel
         cd app
-        cordova platform add ios
+        
+        # Forzamos la plataforma nativa estable que no inyecta Swift ni SceneDelegate
+        cordova platform add ios@6.3.0
         
         # Mover tu HTML y Logo de pantalla a la carpeta de la app
         rm www/index.html
@@ -35,38 +37,21 @@ jobs:
         # Copiar el icono de la máquina de fichar a la raíz de la app
         cp ../icon.png . 2>/dev/null || :
         
-        # Instalar plugin de la camara
+        # Instalar plugin de la camara estándar
         cordova plugin add cordova-plugin-camera
         
-        # Configurar la versión de iOS destino en config.xml
-        sed -i '' 's|<platform name="ios">|<platform name="ios">\n    <icon src="icon.png" />|g' config.xml
+        # Inyectar las directivas limpias de iOS 12 en el config.xml global
+        sed -i '' 's|<platform name="ios">|<platform name="ios">\n    <preference name="DeploymentTarget" value="12.0" />\n    <icon src="icon.png" />|g' config.xml
         
         cordova prepare ios
 
-    - name: Eliminar Soporte de Escenas Modernas (Fix para iOS 12)
+    - name: Compilación Nativa Limpia
       run: |
         cd app/platforms/ios
         
-        # 1. Borramos físicamente el archivo conflictivo de iOS 13+
-        rm -f App/SceneDelegate.swift
-        
-        # 2. Quitamos la referencia de SceneDelegate en el archivo de configuración del proyecto Xcode
-        find . -name "project.pbxproj" -exec sed -i '' '/SceneDelegate.swift/d' {} +
-        
-        # 3. Limpiamos las referencias del manifiesto Info.plist que obligan a usar escenas
-        if [ -f "App/QuioscoSmitel-Info.plist" ]; then
-          plutil -remove UIApplicationSceneManifest App/QuioscoSmitel-Info.plist 2>/dev/null || :
-        fi
-        if [ -f "App/Info.plist" ]; then
-          plutil -remove UIApplicationSceneManifest App/Info.plist 2>/dev/null || :
-        fi
-
-    - name: Compilación Definitiva (Simulador + Target iOS 12)
-      run: |
-        cd app/platforms/ios
-        
-        xcodebuild -workspace App.xcworkspace \
-          -scheme App \
+        # Compilamos usando la estructura clásica sobre el Workspace oficial
+        xcodebuild -workspace QuioscoSmitel.xcworkspace \
+          -scheme QuioscoSmitel \
           -configuration Debug \
           -sdk iphonesimulator \
           -destination "generic/platform=iOS Simulator" \
@@ -82,9 +67,6 @@ jobs:
       run: |
         echo "Localizando el ejecutable real..."
         APP_PATH=$(find ~ -name "QuioscoSmitel.app" -type d 2>/dev/null | grep -v "BuildProductsPath" | head -n 1)
-        if [ -z "$APP_PATH" ]; then
-          APP_PATH=$(find ~ -name "App.app" -type d 2>/dev/null | grep -v "BuildProductsPath" | head -n 1)
-        fi
         
         if [ -z "$APP_PATH" ]; then
           echo "Error crítico: No se encontró ningún binario ejecutable."
@@ -94,9 +76,7 @@ jobs:
         mkdir -p ipa_structure/Payload
         cp -R "$APP_PATH" ipa_structure/Payload/
         
-        mv ipa_structure/Payload/*.app ipa_structure/Payload/QuioscoSmitel.app 2>/dev/null || :
-        
-        # Forzar compatibilidad nativa final en el metadato definitivo
+        # Forzar los metadatos de despliegue finales en el Info.plist para iOS 12
         plutil -replace MinimumOSVersion -string "12.0" ipa_structure/Payload/QuioscoSmitel.app/Info.plist
         
         cd ipa_structure
