@@ -67,6 +67,13 @@ jobs:
           's/ENABLE_MACCATALYST = YES;/ENABLE_MACCATALYST = NO;/g' \
           App.xcodeproj/project.pbxproj || true
 
+     - name: Mostrar estructura del proyecto iOS
+  run: |
+    cd app/platforms/ios
+    pwd
+    ls -la
+    find . -maxdepth 2
+
       - name: Compilar
         run: |
 
