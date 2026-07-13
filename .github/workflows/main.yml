@@ -38,17 +38,29 @@ jobs:
         # Instalar plugin de la camara
         cordova plugin add cordova-plugin-camera
         
-        # Inyectar de forma redundante las directivas de iOS 12 en el config.xml global
-        sed -i '' 's|<platform name="ios">|<platform name="ios">\n    <preference name="DeploymentTarget" value="12.0" />\n    <icon src="icon.png" />|g' config.xml
-        sed -i '' 's|<\/widget>|  <preference name="deployment-target" value="12.0" />\n<\/widget>|g' config.xml
+        # Configurar de forma limpia el icono en config.xml
+        sed -i '' 's|<platform name="ios">|<platform name="ios">\n    <icon src="icon.png" />|g' config.xml
         
         cordova prepare ios
 
-    - name: Compilación Forzada Nativa iOS 12 (Fijando target en Compilador)
+    - name: Desactivar MacCatalyst en el Manifiesto de Paquetes y Xcode
       run: |
         cd app/platforms/ios
         
-        # Corregido: Pasamos el flag de Xcode escapando las rutas correctamente para evitar el error 'inherited'
+        # CIRUGÍA DIRECTA: Eliminamos la plataforma macCatalyst de cualquier manifiesto de Swift Package
+        # para que el validador previo de Xcode no encuentre ninguna regla rota al bajar a iOS 12.
+        find . -name "Package.swift" -exec sed -i '' '/macCatalyst/d' {} +
+        find . -name "Package.swift" -exec sed -i '' '/.macCatalyst/d' {} +
+        
+        # Modificar también el proyecto Xcode nativo eliminando el soporte híbrido por si acaso
+        find . -name "project.pbxproj" -exec sed -i '' '/SUPPORTS_MACCATALYST/d' {} +
+
+    - name: Compilación Nativa (Evitando Validación de Catalyst)
+      run: |
+        cd app/platforms/ios
+        
+        # Lanzamos xcodebuild apuntando al simulador (para evitar firmas estrictas)
+        # pero forzando el despliegue compatible con iOS 12 para tu iPhone 5s
         xcodebuild -workspace App.xcworkspace \
           -scheme App \
           -configuration Debug \
@@ -82,7 +94,7 @@ jobs:
         
         mv ipa_structure/Payload/*.app ipa_structure/Payload/QuioscoSmitel.app 2>/dev/null || :
         
-        # Modificar metadatos nativos finales asegurando el despliegue en iOS 12
+        # Fijar los metadatos de ejecución en iOS 12.0 para evitar cierres inesperados
         plutil -replace MinimumOSVersion -string "12.0" ipa_structure/Payload/QuioscoSmitel.app/Info.plist
         
         cd ipa_structure
