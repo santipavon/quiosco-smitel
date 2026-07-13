@@ -7,7 +7,6 @@ on:
 
 jobs:
   build:
-    # Cambiamos macos-latest (Xcode 26) por macos-14 (Xcode 15), mucho más amigable con iOS 12
     runs-on: macos-14
 
     steps:
@@ -45,12 +44,13 @@ jobs:
         
         cordova prepare ios
 
-    - name: Compilar para Dispositivo Real en Entorno Estable
+    - name: Compilar Proyecto Aislado (Saltando Grafo de Paquetes)
       run: |
         cd app/platforms/ios
         
-        # Al estar en Xcode 15, este comando generará el binario arm64 real para tu iPhone 5s sin quejarse de Catalyst
-        xcodebuild -workspace App.xcworkspace \
+        # Forzamos la compilación apuntando al .xcodeproj directamente para aislarlo del Workspace problemático
+        # Añadimos los flags críticos para ignorar la resolución de Swift Packages erróneos
+        xcodebuild -project App.xcodeproj \
           -scheme App \
           -configuration Debug \
           -sdk iphoneos \
@@ -61,6 +61,8 @@ jobs:
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
+          -disablePackageRepositoryCache \
+          -skipPackagePluginValidation \
           clean build
 
     - name: Construir archivo .IPA oficial para Sideloadly
