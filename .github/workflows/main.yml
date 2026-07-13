@@ -38,29 +38,33 @@ jobs:
         # Instalar plugin de la camara
         cordova plugin add cordova-plugin-camera
         
-        # Configurar de forma limpia el icono en config.xml
+        # Configurar la versión de iOS destino en config.xml
         sed -i '' 's|<platform name="ios">|<platform name="ios">\n    <icon src="icon.png" />|g' config.xml
         
         cordova prepare ios
 
-    - name: Desactivar MacCatalyst en el Manifiesto de Paquetes y Xcode
+    - name: Eliminar Soporte de Escenas Modernas (Fix para iOS 12)
       run: |
         cd app/platforms/ios
         
-        # CIRUGÍA DIRECTA: Eliminamos la plataforma macCatalyst de cualquier manifiesto de Swift Package
-        # para que el validador previo de Xcode no encuentre ninguna regla rota al bajar a iOS 12.
-        find . -name "Package.swift" -exec sed -i '' '/macCatalyst/d' {} +
-        find . -name "Package.swift" -exec sed -i '' '/.macCatalyst/d' {} +
+        # 1. Borramos físicamente el archivo conflictivo de iOS 13+
+        rm -f App/SceneDelegate.swift
         
-        # Modificar también el proyecto Xcode nativo eliminando el soporte híbrido por si acaso
-        find . -name "project.pbxproj" -exec sed -i '' '/SUPPORTS_MACCATALYST/d' {} +
+        # 2. Quitamos la referencia de SceneDelegate en el archivo de configuración del proyecto Xcode
+        find . -name "project.pbxproj" -exec sed -i '' '/SceneDelegate.swift/d' {} +
+        
+        # 3. Limpiamos las referencias del manifiesto Info.plist que obligan a usar escenas
+        if [ -f "App/QuioscoSmitel-Info.plist" ]; then
+          plutil -remove UIApplicationSceneManifest App/QuioscoSmitel-Info.plist 2>/dev/null || :
+        fi
+        if [ -f "App/Info.plist" ]; then
+          plutil -remove UIApplicationSceneManifest App/Info.plist 2>/dev/null || :
+        fi
 
-    - name: Compilación Nativa (Evitando Validación de Catalyst)
+    - name: Compilación Definitiva (Simulador + Target iOS 12)
       run: |
         cd app/platforms/ios
         
-        # Lanzamos xcodebuild apuntando al simulador (para evitar firmas estrictas)
-        # pero forzando el despliegue compatible con iOS 12 para tu iPhone 5s
         xcodebuild -workspace App.xcworkspace \
           -scheme App \
           -configuration Debug \
@@ -87,14 +91,12 @@ jobs:
           exit 1
         fi
         
-        echo "¡App localizada con éxito en! -> $APP_PATH"
-        
         mkdir -p ipa_structure/Payload
         cp -R "$APP_PATH" ipa_structure/Payload/
         
         mv ipa_structure/Payload/*.app ipa_structure/Payload/QuioscoSmitel.app 2>/dev/null || :
         
-        # Fijar los metadatos de ejecución en iOS 12.0 para evitar cierres inesperados
+        # Forzar compatibilidad nativa final en el metadato definitivo
         plutil -replace MinimumOSVersion -string "12.0" ipa_structure/Payload/QuioscoSmitel.app/Info.plist
         
         cd ipa_structure
