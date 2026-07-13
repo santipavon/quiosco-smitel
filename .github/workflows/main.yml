@@ -38,35 +38,43 @@ jobs:
         # Instalar plugin de la camara
         cordova plugin add cordova-plugin-camera
         
-        # Inyectar la configuración básica del icono de forma limpia
-        sed -i '' 's|<platform name="ios">|<platform name="ios">\n    <icon src="icon.png" />|g' config.xml
+        # Configurar de forma limpia el icono y la versión de iOS destino en el bloque nativo correcto
+        sed -i '' 's|<platform name="ios">|<platform name="ios">\n    <preference name="DeploymentTarget" value="12.0" />\n    <icon src="icon.png" />|g' config.xml
+        sed -i '' 's|<\/widget>|  <preference name="deployment-target" value="12.0" />\n<\/widget>|g' config.xml
         
-        # Preparar los archivos nativos
+        # Preparar los archivos nativos de Xcode
         cordova prepare ios
 
-    - name: Compilación Forzada (Evitando restricciones de Apple)
+    - name: Parchear dependencias y Compilar para el procesador del iPhone 5s
       run: |
         cd app/platforms/ios
-        # Usamos el compilador directo para el simulador genérico (ignora firmas, catalyst y certificados)
+        
+        # EL TRUCO: Borramos las dependencias de MacCatalyst directamente en el código de configuración de Xcode
+        # para que no den error de compilación al usar el SDK de dispositivo real
+        find . -name "project.pbxproj" -exec sed -i '' '/SUPPORTS_MACCATALYST/d' {} +
+        find . -name "project.pbxproj" -exec sed -i '' 's/com.apple.Platform.MacCatalyst/com.apple.Platform.IPhoneOS/g' {} +
+        
+        # Compilamos para HARDWARE REAL (iphoneos) forzando arquitecturas de 64 bits antiguas (arm64 nativo de Apple A7)
         xcodebuild -workspace App.xcworkspace \
           -scheme App \
           -configuration Debug \
-          -sdk iphonesimulator \
-          -destination 'generic/platform=iOS Simulator' \
+          -sdk iphoneos \
+          -destination 'generic/platform=iOS' \
+          IPHONEOS_DEPLOYMENT_TARGET=12.0 \
+          ARCHS="arm64" \
+          ONLY_ACTIVE_ARCH=NO \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
-          clean build
+          build
 
     - name: Construir archivo .IPA oficial para Sideloadly
       run: |
-        echo "Localizando el ejecutable limpio..."
-        # Buscamos la carpeta de la app generada en el entorno de simulación
-        APP_PATH=$(find ~ -name "App.app" -type d 2>/dev/null | head -n 1)
+        echo "Localizando el ejecutable real..."
+        APP_PATH=$(find ~ -name "QuioscoSmitel.app" -type d 2>/dev/null | grep -v "BuildProductsPath" | head -n 1)
         
         if [ -z "$APP_PATH" ]; then
-          # Si Cordova le puso el nombre largo del proyecto, lo buscamos así
-          APP_PATH=$(find ~ -name "QuioscoSmitel.app" -type d 2>/dev/null | head -n 1)
+          APP_PATH=$(find ~ -name "App.app" -type d 2>/dev/null | grep -v "BuildProductsPath" | head -n 1)
         fi
         
         if [ -z "$APP_PATH" ]; then
@@ -76,21 +84,16 @@ jobs:
         
         echo "¡App localizada con éxito en! -> $APP_PATH"
         
-        # Crear la estructura oficial que Sideloadly y tu iPhone 5s sí aceptan
         mkdir -p ipa_structure/Payload
         cp -R "$APP_PATH" ipa_structure/Payload/
         
-        # Cambiar el nombre interno de la carpeta de la app para que Sideloadly la asocie bien
+        # Asegurar el nombre correcto y meter la compatibilidad de iOS 12 en los metadatos finales
         mv ipa_structure/Payload/*.app ipa_structure/Payload/QuioscoSmitel.app 2>/dev/null || :
-        
-        # Modificar al vuelo la Info.plist interna para asegurar que Sideloadly la fuerce en tu iOS 12
         plutil -replace MinimumOSVersion -string "12.0" ipa_structure/Payload/QuioscoSmitel.app/Info.plist
         
-        # Comprimir en formato IPA legítimo
         cd ipa_structure
         zip -r ../QuioscoSmitel.ipa Payload
         cd ..
-        echo "¡Archivo .ipa universal generado!"
 
     - name: Guardar el archivo ejecutable resultante (.ipa)
       uses: actions/upload-artifact@v4
