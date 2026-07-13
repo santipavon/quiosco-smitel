@@ -16,45 +16,40 @@ jobs:
     - name: Instalar Node.js
       uses: actions/setup-node@v4.2.0
       with:
-        node-version: 18 # Usamos Node 18, ideal para versiones estables de Cordova
+        node-version: 18
 
     - name: Instalar Cordova
       run: npm install -g cordova@11.1.0
 
-    - name: Crear Proyecto Cordova Puro (Fijado para iOS 12)
+    - name: Crear Proyecto Cordova Estable
       run: |
         cordova create app com.smitel.quiosco QuioscoSmitel
         cd app
-        
-        # Forzamos la plataforma nativa estable que no inyecta Swift ni SceneDelegate
         cordova platform add ios@6.3.0
         
-        # Mover tu HTML y Logo de pantalla a la carpeta de la app
+        # Mover archivos corporativos
         rm www/index.html
         cp ../index.html www/
         cp ../logo.png www/ 2>/dev/null || :
-        
-        # Copiar el icono de la máquina de fichar a la raíz de la app
         cp ../icon.png . 2>/dev/null || :
         
-        # Instalar plugin de la camara estándar
         cordova plugin add cordova-plugin-camera
         
-        # Inyectar las directivas limpias de iOS 12 en el config.xml global
+        # Forzar target 12.0 en el config.xml clásico
         sed -i '' 's|<platform name="ios">|<platform name="ios">\n    <preference name="DeploymentTarget" value="12.0" />\n    <icon src="icon.png" />|g' config.xml
         
         cordova prepare ios
 
-    - name: Compilación Nativa Limpia
+    - name: Compilación NATIVA para Hardware Real (arm64 Físico)
       run: |
         cd app/platforms/ios
         
-        # Compilamos usando la estructura clásica sobre el Workspace oficial
+        # Compilamos para iphoneos (Dispositivo Físico Real) usando la estructura limpia clásica
         xcodebuild -workspace QuioscoSmitel.xcworkspace \
           -scheme QuioscoSmitel \
           -configuration Debug \
-          -sdk iphonesimulator \
-          -destination "generic/platform=iOS Simulator" \
+          -sdk iphoneos \
+          -destination "generic/platform=iOS" \
           IPHONEOS_DEPLOYMENT_TARGET=12.0 \
           ARCHS="arm64" \
           ONLY_ACTIVE_ARCH=NO \
@@ -65,7 +60,7 @@ jobs:
 
     - name: Construir archivo .IPA oficial para Sideloadly
       run: |
-        echo "Localizando el ejecutable real..."
+        echo "Localizando el ejecutable móvil real..."
         APP_PATH=$(find ~ -name "QuioscoSmitel.app" -type d 2>/dev/null | grep -v "BuildProductsPath" | head -n 1)
         
         if [ -z "$APP_PATH" ]; then
@@ -76,7 +71,6 @@ jobs:
         mkdir -p ipa_structure/Payload
         cp -R "$APP_PATH" ipa_structure/Payload/
         
-        # Forzar los metadatos de despliegue finales en el Info.plist para iOS 12
         plutil -replace MinimumOSVersion -string "12.0" ipa_structure/Payload/QuioscoSmitel.app/Info.plist
         
         cd ipa_structure
