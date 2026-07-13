@@ -38,17 +38,20 @@ jobs:
         # Instalar plugin de la camara
         cordova plugin add cordova-plugin-camera
         
-        # Configurar de forma limpia el icono en config.xml
+        # Inyectar la configuración básica del icono de forma limpia
         sed -i '' 's|<platform name="ios">|<platform name="ios">\n    <icon src="icon.png" />|g' config.xml
         
         cordova prepare ios
 
-    - name: Compilación por Simulador Forzada a Arquitectura Móvil
+    - name: Compilación Forzada con Librerías Estáticas Integradas
       run: |
         cd app/platforms/ios
         
-        # Compilamos usando iphonesimulator (que se salta el bug de Catalyst)
-        # pero forzamos ARCHS=arm64 para que el procesador físico de tu iPhone 5s pueda leer el código binario sin colgarse
+        # TRUCO MAESTRO: Forzamos a Xcode a incrustar de forma estática las librerías de Cordova y Swift
+        # Esto evita que el cargador dinámico de iOS 12 mate la aplicación al arrancar.
+        find . -name "project.pbxproj" -exec sed -i '' 's/MACH_O_TYPE = mh_dylib/MACH_O_TYPE = mh_execute/g' {} +
+        find . -name "project.pbxproj" -exec sed -i '' 's/EMBEDDED_CONTENT_CONTAINS_SWIFT = YES/EMBEDDED_CONTENT_CONTAINS_SWIFT = NO/g' {} +
+        
         xcodebuild -workspace App.xcworkspace \
           -scheme App \
           -configuration Debug \
@@ -56,6 +59,8 @@ jobs:
           -destination 'generic/platform=iOS Simulator' \
           ARCHS="arm64" \
           ONLY_ACTIVE_ARCH=NO \
+          MACH_O_TYPE="mh_execute" \
+          LD_RUNPATH_SEARCH_PATHS="$(inherited) @executable_path/Frameworks" \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
@@ -74,14 +79,12 @@ jobs:
           exit 1
         fi
         
-        echo "¡App localizada con éxito en! -> $APP_PATH"
-        
         mkdir -p ipa_structure/Payload
         cp -R "$APP_PATH" ipa_structure/Payload/
         
         mv ipa_structure/Payload/*.app ipa_structure/Payload/QuioscoSmitel.app 2>/dev/null || :
         
-        # Forzar compatibilidad total con iOS 12 modificando la metadata final directamente
+        # Forzar la compatibilidad final de metadatos para iOS 12
         plutil -replace MinimumOSVersion -string "12.0" ipa_structure/Payload/QuioscoSmitel.app/Info.plist
         
         cd ipa_structure
