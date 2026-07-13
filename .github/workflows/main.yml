@@ -11,21 +11,19 @@ jobs:
     runs-on: macos-15
 
     steps:
-      - name: Descargar repositorio
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Instalar Node.js
+      - name: Instalar Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Instalar Cordova
-        run: |
-          npm install -g cordova@12
+        run: npm install -g cordova@12
 
-      - name: Crear proyecto Cordova
+      - name: Crear proyecto
         run: |
-
           cordova create app com.smitel.quiosco QuioscoSmitel
 
           cd app
@@ -34,71 +32,90 @@ jobs:
 
           cordova plugin add cordova-plugin-camera@7
 
-          rm www/index.html
-
+          rm -f www/index.html
           cp ../index.html www/
 
-          if [ -f ../logo.png ]; then
-            cp ../logo.png www/
-          fi
-
-          if [ -f ../icon.png ]; then
-            cp ../icon.png .
-          fi
-
-          sed -i '' '/<platform name="ios">/a\
-              <preference name="deployment-target" value="12.0"/>
-          ' config.xml
+          [ -f ../logo.png ] && cp ../logo.png www/
+          [ -f ../icon.png ] && cp ../icon.png .
 
           cordova prepare ios
 
+      - name: Mostrar estructura generada
+        run: |
+          cd app/platforms/ios
+          pwd
+          ls -la
+          find . -maxdepth 2
+
       - name: Desactivar Mac Catalyst
         run: |
-
           cd app/platforms/ios
 
-          grep -R "MACCATALYST" . || true
-
+          find . -name project.pbxproj -exec \
           sed -i '' \
-          's/SUPPORTS_MACCATALYST = YES;/SUPPORTS_MACCATALYST = NO;/g' \
-          App.xcodeproj/project.pbxproj || true
+          's/SUPPORTS_MACCATALYST = YES;/SUPPORTS_MACCATALYST = NO;/g' {} \;
 
+          find . -name project.pbxproj -exec \
           sed -i '' \
-          's/ENABLE_MACCATALYST = YES;/ENABLE_MACCATALYST = NO;/g' \
-          App.xcodeproj/project.pbxproj || true
-
-     - name: Mostrar estructura del proyecto iOS
-  run: |
-    cd app/platforms/ios
-    pwd
-    ls -la
-    find . -maxdepth 2
+          's/ENABLE_MACCATALYST = YES;/ENABLE_MACCATALYST = NO;/g' {} \;
 
       - name: Compilar
         run: |
-
           cd app/platforms/ios
 
-          xcodebuild \
-            -workspace App.xcworkspace \
-            -scheme App \
-            -sdk iphoneos \
-            -configuration Release \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            IPHONEOS_DEPLOYMENT_TARGET=12.0 \
-            build
+          WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" | head -1)
+          PROJECT=$(find . -maxdepth 1 -name "*.xcodeproj" | head -1)
 
-      - name: Buscar .app
+          if [ -n "$WORKSPACE" ]; then
+
+            SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+
+            echo "Workspace: $WORKSPACE"
+            echo "Scheme: $SCHEME"
+
+            xcodebuild \
+              -workspace "$WORKSPACE" \
+              -scheme "$SCHEME" \
+              -sdk iphoneos \
+              -configuration Release \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY="" \
+              IPHONEOS_DEPLOYMENT_TARGET=12.0 \
+              build
+
+          else
+
+            SCHEME=$(basename "$PROJECT" .xcodeproj)
+
+            echo "Project: $PROJECT"
+            echo "Scheme: $SCHEME"
+
+            xcodebuild \
+              -project "$PROJECT" \
+              -scheme "$SCHEME" \
+              -sdk iphoneos \
+              -configuration Release \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY="" \
+              IPHONEOS_DEPLOYMENT_TARGET=12.0 \
+              build
+
+          fi
+
+      - name: Localizar App
         run: |
-
-          APP=$(find app/platforms/ios -name "*.app" | head -n 1)
+          APP=$(find app/platforms/ios -name "*.app" | head -1)
 
           echo "APP=$APP"
 
-          mkdir Payload
+          if [ -z "$APP" ]; then
+            echo "No se encontró ninguna .app"
+            exit 1
+          fi
 
+          mkdir Payload
           cp -R "$APP" Payload/
 
           zip -qry QuioscoSmitel.ipa Payload
