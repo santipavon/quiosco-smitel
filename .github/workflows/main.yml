@@ -11,12 +11,12 @@ jobs:
 
     steps:
     - name: Descargar el codigo del repositorio
-      uses: actions/checkout@v4
+      uses: actions/checkout@v4.2.2 # Versión actualizada
 
     - name: Instalar Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v4.2.0 # Versión actualizada
       with:
-        node-version: 18
+        node-version: 22 # Subimos a Node 22 para evitar warnings
 
     - name: Instalar Cordova
       run: npm install -g cordova
@@ -40,10 +40,10 @@ jobs:
         cd app
         cordova prepare ios
 
-    - name: Compilar App (Forzar ruta de salida)
+    - name: Compilar App (Forzar destino y ruta)
       run: |
         cd app/platforms/ios
-        xcodebuild -workspace QuioscoSmitel.xcworkspace -scheme QuioscoSmitel -configuration Debug -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=build/output
+        xcodebuild -workspace QuioscoSmitel.xcworkspace -scheme QuioscoSmitel -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=build/output
 
     - name: Guardar el archivo ejecutable resultante
       uses: actions/upload-artifact@v4
